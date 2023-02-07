@@ -1,4 +1,37 @@
-# Issue M-1: Risk with Liquidation - Because of partnership requirement, caller may be unable to redeem during liquidation making it less likely for them to be willing to perform the liquidation 
+# Issue M-1: Tokens not owned by an account can be added as an asset to the account 
+
+Source: https://github.com/sherlock-audit/2023-01-sentiment-judging/issues/26 
+
+## Found by 
+Bahurum
+
+## Summary
+In the controllers `RewardRouterController`, `RewardRouterV2Controller` and `DNGMXVaultController` the function `canCall` can return in `tokenIn` a token address that has actually not been received by the account. If the account did not have the token before, than the token is added to the asset list of the account even if the account does not hold the token at all.
+
+## Vulnerability Detail
+
+- in `RewardRouterController`: in `canCallCompound()`, `WETH` is added to `tokensIn` but no tokens are sent to the account as a result of the call to the Reward Router's function `compound()`
+- in `RewardRouterV2Controller`: in `canCallRedeem()` the token redeemed is added to `tokensIn`, but the router's function `unstakeAndRedeemGlp()` allows to send the tokens to a 3rd party receiver instead of the caller. In such a case, nop tokens are sent to the account.
+- in `DNGMXVaultController`: in `canWithdraw()` the token redeemed is added to `tokensIn`, but the DN GMX vault's functions `redeemToken()` and `withdrawToken()` allow to send the tokens to a 3rd party receiver instead of the caller. In such a case, nop tokens are sent to the account.
+
+## Impact
+There can be tokens in the list of assets of an account that the account doesn't actually hold. Note that this does not pose any issues for the calculation of collateral.
+
+## Code Snippet
+https://github.com/sherlock-audit/2023-01-sentiment/blob/main/controller-55/src/gmx/RewardRouterController.sol#L67
+
+https://github.com/sherlock-audit/2023-01-sentiment/blob/main/controller-55/src/gmx/RewardRouterV2Controller.sol#L88
+
+https://github.com/sherlock-audit/2023-01-sentiment/blob/main/controller-55/src/gmx/RewardRouterV2Controller.sol#L88
+
+## Tool used
+
+Manual Review
+
+## Recommendation
+No particular reccommendation.
+
+# Issue M-2: Risk with Liquidation - Because of partnership requirement, caller may be unable to redeem during liquidation making it less likely for them to be willing to perform the liquidation 
 
 Source: https://github.com/sherlock-audit/2023-01-sentiment-judging/issues/20 
 
@@ -66,7 +99,7 @@ Considering this issue as a valid medium.
 
 
 
-# Issue M-2: `PreviewRedeem` may under-price the value of the asset 
+# Issue M-3: `PreviewRedeem` may under-price the value of the asset 
 
 Source: https://github.com/sherlock-audit/2023-01-sentiment-judging/issues/19 
 
@@ -120,7 +153,7 @@ Manual Review
 
 Use the account to determine the price
 
-# Issue M-3: No check if Arbitrum L2 sequencer is down in Chainlink feeds 
+# Issue M-4: No check if Arbitrum L2 sequencer is down in Chainlink feeds 
 
 Source: https://github.com/sherlock-audit/2023-01-sentiment-judging/issues/16 
 
@@ -172,7 +205,15 @@ Manual Review
 It is recommended to follow the code example of Chainlink: 
 https://docs.chain.link/data-feeds/l2-sequencer-feeds#example-code
 
-# Issue M-4: GMX Reward Router's claimForAccount() can be abused to incorrectly add WETH to tokensIn 
+## Discussion
+
+**zobront**
+
+Fix confirmed.
+
+
+
+# Issue M-5: GMX Reward Router's claimForAccount() can be abused to incorrectly add WETH to tokensIn 
 
 Source: https://github.com/sherlock-audit/2023-01-sentiment-judging/issues/10 
 
@@ -269,7 +310,78 @@ While this fix does require changing a core contract, it would negate the need t
 
 This accuracy is especially important as Sentiment becomes better known and integrated into the Arbitrum ecosystem. While I know that having additional assets doesn't cause internal problems at present, it is hard to predict what issues inaccurate data will cause in the future. Seeing that Plutus is checking Sentiment contracts for their whitelist drove this point home — we need to ensure the data stays accurate, even in edge cases, or else there will be trickle down problems we can't currently predict.
 
-# Issue M-5: Using one controller for two addresses could risk signature collisions 
+## Discussion
+
+**bahurum**
+
+Escalate for 50 USDC.
+I believe that this issue is Low severity.
+I filed a list of issues with same impact as a Low severity submission (https://github.com/sherlock-audit/2023-01-sentiment-judging/issues/26).
+This issue will never lead to loss or lockup of funds. So by Sherlock judging criteria this is Low severity. 
+Otherwise, please provide a scenario where this issue leads to a loss or lockup of funds.
+The watson mentions some similiar issues judged as Medium in previous contests. I didn't see those before or I would have escalated them as well for the same reason.
+
+**sherlock-admin**
+
+ > Escalate for 50 USDC.
+> I believe that this issue is Low severity.
+> I filed a list of issues with same impact as a Low severity submission (https://github.com/sherlock-audit/2023-01-sentiment-judging/issues/26).
+> This issue will never lead to loss or lockup of funds. So by Sherlock judging criteria this is Low severity. 
+> Otherwise, please provide a scenario where this issue leads to a loss or lockup of funds.
+> The watson mentions some similiar issues judged as Medium in previous contests. I didn't see those before or I would have escalated them as well for the same reason.
+
+You've created a valid escalation for 50 USDC!
+
+To remove the escalation from consideration: Delete your comment.
+To change the amount you've staked on this escalation: Edit your comment **(do not create a new comment)**.
+
+You may delete or edit your escalation comment anytime before the 48-hour escalation window closes. After that, the escalation becomes final.
+
+**zobront**
+
+Baharum is correct that within the protocol, as it stands, there are no risks of an account having an incorrect Assets list. 
+
+But Sentiment is becoming increasingly incorporated into the Arbitrum DeFi ecosystem. Sentiment purports that their account Asset lists are accurate and they go to extreme lengths with the Controller setup (and take on additional security risk) to track tokens in and out to keep it accurate. If it didn’t matter, they could just use the list of all allowed tokens when taking operations on an account.
+
+As I stated in my Recommendations:
+
+> [W]e need to ensure the data stays accurate, even in edge cases, or else there will be trickle down problems we can't currently predict.
+
+I believe this is a valid Medium, and is the kind of thing that Sentiment needs to understand when releasing new Controllers with the explicit goal of keeping Asset lists accurate as users interact with a given protocol.
+
+**bahurum**
+
+Thank you for your reply. 
+
+While I agree that data accuracy is desired, I'd like to insist that IMO the impact of this issue is not within Sherlock's definition of Medium severity issue, since there is no path to loss of funds, unless the contrary is shown. 
+
+For integration, if an asset with zero balance is in an account's asset list, I don't see that as a problem since an external protocol can check if the balance is positive if a zero balance ever causes issues. 
+
+If Sherlock thinks differently then I encourage them to reconsider my Low severity issue #26 along with your 2 issues #10 and #5 as a Medium.
+
+**zobront**
+
+I agree that your Low should be Medium.
+
+**hrishibhat**
+
+Escalation accepted. 
+
+Considering issue #26 as a valid medium in this case
+
+**sherlock-admin**
+
+> Escalation accepted. 
+> 
+> Considering issue #26 as a valid medium in this case
+
+This issue's escalations have been accepted!
+
+Contestants' payouts and scores will be updated according to the changes made on this issue.
+
+
+
+# Issue M-6: Using one controller for two addresses could risk signature collisions 
 
 Source: https://github.com/sherlock-audit/2023-01-sentiment-judging/issues/9 
 
@@ -310,7 +422,66 @@ Split DNGMXVaultController into two files, one for each of the two contracts tha
 
 Going forward, continue to uphold the practice of always having one Controller per contract, unless the two contracts are identical and non-upgradeable.
 
-# Issue M-6: All Rage Trade functions allow sending tokens to a different address, leading to incorrect tokensIn 
+## Discussion
+
+**bahurum**
+
+Escalate for 50 USDC. 
+This issue should be low/informational.
+I have flagged the issue but as Informational (https://github.com/sherlock-audit/2023-01-sentiment-judging/issues/25), since the two target contracts are non-upgradeable and new functions can never be added and signature collision is impossible.
+Here are the contracts on chain:
+[`depositPeriphery`](https://arbiscan.io/address/0x7ca90dd6813256bd040a8e13bbced857b1c0c90c#writeContract) 
+[`withdrawPeriphery`](https://arbiscan.io/address/0xBA55D7f67Fa22DF5E92487d5b306DdB1aA543d10#writeContract)
+Note that they do not share any of the 3 function signatures of `DNGMXVaultController` and they never will since they are non-upradeable.
+
+**sherlock-admin**
+
+ > Escalate for 50 USDC. 
+> This issue should be low/informational.
+> I have flagged the issue but as Informational (https://github.com/sherlock-audit/2023-01-sentiment-judging/issues/25), since the two target contracts are non-upgradeable and new functions can never be added and signature collision is impossible.
+> Here are the contracts on chain:
+> [`depositPeriphery`](https://arbiscan.io/address/0x7ca90dd6813256bd040a8e13bbced857b1c0c90c#writeContract) 
+> [`withdrawPeriphery`](https://arbiscan.io/address/0xBA55D7f67Fa22DF5E92487d5b306DdB1aA543d10#writeContract)
+> Note that they do not share any of the 3 function signatures of `DNGMXVaultController` and they never will since they are non-upradeable.
+
+You've created a valid escalation for 50 USDC!
+
+To remove the escalation from consideration: Delete your comment.
+To change the amount you've staked on this escalation: Edit your comment **(do not create a new comment)**.
+
+You may delete or edit your escalation comment anytime before the 48-hour escalation window closes. After that, the escalation becomes final.
+
+**zobront**
+
+Baharum's issue did not identify the signature collision as a risk for combining contracts into one Controller, and simply said that it would be confusing, which is why it was identified as Informational.
+
+The issue here points out that the current Controller violates an explicit practice that Sentiment must be enforcing on all contracts to keep their protocol safe. Just because the collision doesn't happen in this specific case, it doesn't change the fact that Sentiment is violating a security principle that they should be upholding consistently.
+
+To drive the point home, I do not believe Sentiment would get their contracts re-audited if they added one function to an individual Controller. So this type of issue needs to be caught NOW so that they don't set themselves up to be in a situation where adding one innocent, safe function later ends up causing a catastrophic problem. 
+
+**zobront**
+
+Fix confirmed.
+
+**hrishibhat**
+
+Escalation accepted. 
+
+After further internal discussion, considering this issue as informational as there are no collision risks with current implementation and any changes to the code must undergo an audit process. 
+
+**sherlock-admin**
+
+> Escalation accepted. 
+> 
+> After further internal discussion, considering this issue as informational as there are no collision risks with current implementation and any changes to the code must undergo an audit process. 
+
+This issue's escalations have been accepted!
+
+Contestants' payouts and scores will be updated according to the changes made on this issue.
+
+
+
+# Issue M-7: All Rage Trade functions allow sending tokens to a different address, leading to incorrect tokensIn 
 
 Source: https://github.com/sherlock-audit/2023-01-sentiment-judging/issues/5 
 
@@ -378,6 +549,53 @@ function canDeposit(bytes calldata data)
 **r0ohafza**
 
 Agree with the issue mentioned. Disagree with the fix provided since the receiver can be any other account and still lead to an accounting error, I think the recommended fix mentioned by @zobront  on issue #10 will resolve this as well.
+
+**bahurum**
+
+Escalate for 50 USDC.
+I believe that this issue is Low severity.
+I filed it as a low severity myself (https://github.com/sherlock-audit/2023-01-sentiment-judging/issues/26). See the 3rd point in the Vulnerability Detail section.
+This issue will never lead to loss or lockup of funds. So by Sherlock judging criteria this is Low severity. 
+Otherwise, please provide a scenario where this issue leads to a loss or lockup of funds.
+The watson mentions some similiar issues previously judged as Medium. I didn't see those before or I would have escalated them as well for the same reason.
+
+**sherlock-admin**
+
+ > Escalate for 50 USDC.
+> I believe that this issue is Low severity.
+> I filed it as a low severity myself (https://github.com/sherlock-audit/2023-01-sentiment-judging/issues/26). See the 3rd point in the Vulnerability Detail section.
+> This issue will never lead to loss or lockup of funds. So by Sherlock judging criteria this is Low severity. 
+> Otherwise, please provide a scenario where this issue leads to a loss or lockup of funds.
+> The watson mentions some similiar issues previously judged as Medium. I didn't see those before or I would have escalated them as well for the same reason.
+
+You've created a valid escalation for 50 USDC!
+
+To remove the escalation from consideration: Delete your comment.
+To change the amount you've staked on this escalation: Edit your comment **(do not create a new comment)**.
+
+You may delete or edit your escalation comment anytime before the 48-hour escalation window closes. After that, the escalation becomes final.
+
+**hrishibhat**
+
+Escalation accepted
+
+While the above issue is not considered a low in this case, 
+considering issue #26 as a valid medium based on further discussions in issue #10 
+
+
+
+**sherlock-admin**
+
+> Escalation accepted
+> 
+> While the above issue is not considered a low in this case, 
+> considering issue #26 as a valid medium based on further discussions in issue #10 
+> 
+> 
+
+This issue's escalations have been accepted!
+
+Contestants' payouts and scores will be updated according to the changes made on this issue.
 
 
 
